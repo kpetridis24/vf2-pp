@@ -1,6 +1,6 @@
 # VF2++
-A state-of-the-art algorithm for the **Graph Isomorphism** problem, adjusted for **Sub-Graph** and 
-**Induced Sub-Graph Isomorphism** problem, extended to **directed** and **multigraph** settings.
+A state-of-the-art algorithm for the **Graph Isomorphism** problem, adjusted for the **Sub-Graph** and 
+**Induced Sub-Graph Isomorphism** problems and extended to **directed** and **multigraph** settings.
 
 The benchmark results validate the premises of the VF2++ [paper](https://www.sciencedirect.com/science/article/pii/S0166218X18300829) and illustrate the superiority of the new optimized algorithm, compared to the previous isomorphism solvers.
 
