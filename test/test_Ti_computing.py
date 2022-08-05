@@ -1,9 +1,9 @@
 import collections
 
 import networkx as nx
-from networkx.algorithms.isomorphism.VF2pp_helpers.state import (
-    restore_Tinout,
-    update_Tinout,
+from inc.Helpers.state import (
+    _restore_Tinout,
+    _update_Tinout,
 )
 
 
@@ -22,7 +22,16 @@ class TestTinoutUpdating:
     T2_out = set(G.nodes())
 
     GraphParameters = collections.namedtuple(
-        "GraphParameters", ["G1", "G2", "G1_labels", "G2_labels"]
+        "GraphParameters",
+        [
+            "G1",
+            "G2",
+            "G1_labels",
+            "G2_labels",
+            "nodes_of_G1Labels",
+            "nodes_of_G2Labels",
+            "G2_nodes_of_degree",
+        ],
     )
     StateParameters = collections.namedtuple(
         "StateParameters",
@@ -57,7 +66,9 @@ class TestTinoutUpdating:
         assert correct_T1_out == self.T1_out
         assert correct_T2_out == self.T2_out
 
-        graph_params = self.GraphParameters(self.G, self.G, None, None)
+        graph_params = self.GraphParameters(
+            self.G, self.G, None, None, None, None, None
+        )
         state_params = self.StateParameters(
             self.mapping,
             self.reverse_mapping,
@@ -75,7 +86,7 @@ class TestTinoutUpdating:
             correct_T1, correct_T2, correct_T1_out, correct_T2_out = self.compute_Ti(
                 self.G, self.G
             )
-            update_Tinout(node, node, graph_params, state_params)
+            _update_Tinout(node, node, graph_params, state_params)
             assert correct_T1 == self.T1
             assert correct_T2 == self.T2
             assert correct_T1_out == self.T1_out
@@ -89,7 +100,9 @@ class TestTinoutUpdating:
         # Initialize Ti/Ti_out
         self.T1, self.T2, self.T1_out, self.T2_out = self.compute_Ti(self.G, self.G)
 
-        graph_params = self.GraphParameters(self.G, self.G, None, None)
+        graph_params = self.GraphParameters(
+            self.G, self.G, None, None, None, None, None
+        )
         state_params = self.StateParameters(
             self.mapping,
             self.reverse_mapping,
@@ -105,7 +118,7 @@ class TestTinoutUpdating:
             self.reverse_mapping.pop(node)
 
             T1, T2, T1_out, T2_out = self.compute_Ti(self.G, self.G)
-            restore_Tinout(node, node, graph_params, state_params)
+            _restore_Tinout(node, node, graph_params, state_params)
             assert self.T1 == T1
             assert self.T2 == T2
             assert self.T1_out == T1_out

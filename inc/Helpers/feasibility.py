@@ -1,9 +1,7 @@
-import collections
-
 import networkx as nx
 
 
-def feasibility(node1, node2, graph_params, state_params):
+def _feasibility(node1, node2, graph_params, state_params):
     """Given a candidate pair of nodes u and v from G1 and G2 respectively, checks if it's feasible to extend the
     mapping, i.e. if u and v can be matched.
 
@@ -13,27 +11,33 @@ def feasibility(node1, node2, graph_params, state_params):
 
     Parameters
     ----------
-    node1,node2: int
-        The two candidate nodes being checked.
+    node1, node2: Graph node
+        The candidate pair of nodes being checked for matching
 
-    G1,G2: NetworkX Graph or MultiGraph instances.
-        The two graphs to check for isomorphism or monomorphism.
+    graph_params: namedtuple
+        Contains all the Graph-related parameters:
 
-    G1_labels,G2_labels: dict
-        The label of every node in G1 and G2 respectively.
+        G1,G2: NetworkX Graph or MultiGraph instances.
+            The two graphs to check for isomorphism or monomorphism
 
-    mapping: dict
-        The mapping as extended so far. Maps nodes of G1 to nodes of G2.
+        G1_labels,G2_labels: dict
+            The label of every node in G1 and G2 respectively
 
-    reverse_mapping: dict
-        The reverse mapping as extended so far. Maps nodes from G2 to nodes of G1. It's basically "mapping" reversed.
+    state_params: namedtuple
+        Contains all the State-related parameters:
 
-    T1, T2: set
-        Ti contains uncovered neighbors of covered nodes from Gi, i.e. nodes that are not in the mapping, but are
-        neighbors of nodes that are.
+        mapping: dict
+            The mapping as extended so far. Maps nodes of G1 to nodes of G2
 
-    T1_out, T2_out: set
-        Ti_out contains all the nodes from Gi, that are neither in the mapping nor in Ti.
+        reverse_mapping: dict
+            The reverse mapping as extended so far. Maps nodes from G2 to nodes of G1. It's basically "mapping" reversed
+
+        T1, T2: set
+            Ti contains uncovered neighbors of covered nodes from Gi, i.e. nodes that are not in the mapping, but are
+            neighbors of nodes that are.
+
+        T1_out, T2_out: set
+            Ti_out contains all the nodes from Gi, that are neither in the mapping nor in Ti
 
     Returns
     -------
@@ -43,48 +47,58 @@ def feasibility(node1, node2, graph_params, state_params):
     if G1.number_of_edges(node1, node1) != G2.number_of_edges(node2, node2):
         return False
 
-    if cut_PT(node1, node2, graph_params, state_params):
+    if _cut_PT(node1, node2, graph_params, state_params):
         return False
 
-    if not consistent_PT(node1, node2, graph_params, state_params):
-        return False
+    if isinstance(G1, nx.MultiGraph):
+        if not _consistent_PT(node1, node2, graph_params, state_params):
+            return False
 
     return True
 
 
-def cut_PT(u, v, graph_params, state_params):
+def _cut_PT(u, v, graph_params, state_params):
     """Implements the cutting rules for the ISO problem.
 
     Parameters
     ----------
-    G1,G2: NetworkX Graph or MultiGraph instances.
-        The two graphs to check for isomorphism or monomorphism.
-
-    G1_labels,G2_labels: dict
-        The label of every node in G1 and G2 respectively.
-
-    u, v: int
+    u, v: Graph node
         The two candidate nodes being examined.
 
-    T1, T2: set
-        Ti contains uncovered neighbors of covered nodes from Gi, i.e. nodes that are not in the mapping, but are
-        neighbors of nodes that are.
+    graph_params: namedtuple
+        Contains all the Graph-related parameters:
 
-    T1_out, T2_out: set
-        Ti_out contains all the nodes from Gi, that are neither in the mapping nor in Ti.
+        G1,G2: NetworkX Graph or MultiGraph instances.
+            The two graphs to check for isomorphism or monomorphism
+
+        G1_labels,G2_labels: dict
+            The label of every node in G1 and G2 respectively
+
+    state_params: namedtuple
+        Contains all the State-related parameters:
+
+        mapping: dict
+            The mapping as extended so far. Maps nodes of G1 to nodes of G2
+
+        reverse_mapping: dict
+            The reverse mapping as extended so far. Maps nodes from G2 to nodes of G1. It's basically "mapping" reversed
+
+        T1, T2: set
+            Ti contains uncovered neighbors of covered nodes from Gi, i.e. nodes that are not in the mapping, but are
+            neighbors of nodes that are.
+
+        T1_out, T2_out: set
+            Ti_out contains all the nodes from Gi, that are neither in the mapping nor in Ti
 
     Returns
     -------
     True if we should prune this branch, i.e. the node pair failed the cutting checks. False otherwise.
     """
-    G1, G2, G1_labels, G2_labels = graph_params
+    G1, G2, G1_labels, G2_labels, _, _, _ = graph_params
     _, _, T1, T1_out, T2, T2_out = state_params
 
-    u_neighbors_labels = {n1: G1_labels[n1] for n1 in G1[u]}
-    u_labels_neighbors = nx.utils.groups(u_neighbors_labels)
-
-    v_neighbors_labels = {n2: G2_labels[n2] for n2 in G2[v]}
-    v_labels_neighbors = nx.utils.groups(v_neighbors_labels)
+    u_labels_neighbors = nx.utils.groups({n1: G1_labels[n1] for n1 in G1[u]})
+    v_labels_neighbors = nx.utils.groups({n2: G2_labels[n2] for n2 in G2[v]})
 
     # if the neighbors of u, do not have the same labels as those of v, NOT feasible.
     if set(u_labels_neighbors.keys()) != set(v_labels_neighbors.keys()):
@@ -92,6 +106,17 @@ def cut_PT(u, v, graph_params, state_params):
 
     for label, G1_nbh in u_labels_neighbors.items():
         G2_nbh = v_labels_neighbors[label]
+
+        if isinstance(G1, nx.MultiGraph):
+            # Check for every neighbor in the neighborhood, if u-nbr1 has same edges as v-nbr2
+            u_nbrs_edges = sorted(G1.number_of_edges(u, x) for x in G1_nbh)
+            v_nbrs_edges = sorted(G2.number_of_edges(v, x) for x in G2_nbh)
+            if any(
+                u_nbr_edges != v_nbr_edges
+                for u_nbr_edges, v_nbr_edges in zip(u_nbrs_edges, v_nbrs_edges)
+            ):
+                return True
+
         if len(T1.intersection(G1_nbh)) != len(T2.intersection(G2_nbh)) or len(
             T1_out.intersection(G1_nbh)
         ) != len(T2_out.intersection(G2_nbh)):
@@ -100,46 +125,56 @@ def cut_PT(u, v, graph_params, state_params):
     return False
 
 
-def consistent_PT(u, v, graph_params, state_params):
+def _consistent_PT(u, v, graph_params, state_params):
     """Checks the consistency of extending the mapping using the current node pair.
 
     Parameters
     ----------
-    G1,G2: NetworkX Graph or MultiGraph instances.
-        The two graphs to check for isomorphism or monomorphism.
-
-    u, v: int
+    u, v: Graph node
         The two candidate nodes being examined.
 
-    mapping: dict
-        The mapping as extended so far. Maps nodes of G1 to nodes of G2.
+    graph_params: namedtuple
+        Contains all the Graph-related parameters:
 
-    reverse_mapping: dict
-        The reverse mapping as extended so far. Maps nodes from G2 to nodes of G1. It's basically "mapping" reversed.
+        G1,G2: NetworkX Graph or MultiGraph instances.
+            The two graphs to check for isomorphism or monomorphism
+
+        G1_labels,G2_labels: dict
+            The label of every node in G1 and G2 respectively
+
+    state_params: namedtuple
+        Contains all the State-related parameters:
+
+        mapping: dict
+            The mapping as extended so far. Maps nodes of G1 to nodes of G2
+
+        reverse_mapping: dict
+            The reverse mapping as extended so far. Maps nodes from G2 to nodes of G1. It's basically "mapping" reversed
+
+        T1, T2: set
+            Ti contains uncovered neighbors of covered nodes from Gi, i.e. nodes that are not in the mapping, but are
+            neighbors of nodes that are.
+
+        T1_out, T2_out: set
+            Ti_out contains all the nodes from Gi, that are neither in the mapping nor in Ti
 
     Returns
     -------
     True if the pair passes all the consistency checks successfully. False otherwise.
     """
-    # Check if every covered neighbor of u is mapped to every covered neighbor of v
-    # Also check if there is the same number of edges between the candidates and their neighbors
     G1, G2 = graph_params.G1, graph_params.G2
     mapping, reverse_mapping = state_params.mapping, state_params.reverse_mapping
 
     for neighbor in G1[u]:
         if neighbor in mapping:
-            if mapping[neighbor] not in G2[v]:
-                return False
-            elif G1.number_of_edges(u, neighbor) != G2.number_of_edges(
+            if G1.number_of_edges(u, neighbor) != G2.number_of_edges(
                 v, mapping[neighbor]
             ):
                 return False
 
     for neighbor in G2[v]:
         if neighbor in reverse_mapping:
-            if reverse_mapping[neighbor] not in G1[u]:
-                return False
-            elif G1.number_of_edges(u, reverse_mapping[neighbor]) != G2.number_of_edges(
+            if G1.number_of_edges(u, reverse_mapping[neighbor]) != G2.number_of_edges(
                 v, neighbor
             ):
                 return False

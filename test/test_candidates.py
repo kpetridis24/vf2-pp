@@ -1,7 +1,7 @@
 import collections
 
 import networkx as nx
-from networkx.algorithms.isomorphism.VF2pp_helpers.candidates import find_candidates
+from inc.Helpers.candidates import _find_candidates
 
 
 class TestCandidateSelection:
@@ -45,7 +45,16 @@ class TestCandidateSelection:
     mapped_nodes = {0: 0, 1: 9, 2: 8, 3: 7, 4: 6, 5: 5, 6: 4, 7: 1, 8: 3, 9: 2}
 
     GraphParameters = collections.namedtuple(
-        "GraphParameters", ["G1", "G2", "G1_labels", "G2_labels"]
+        "GraphParameters",
+        [
+            "G1",
+            "G2",
+            "G1_labels",
+            "G2_labels",
+            "nodes_of_G1Labels",
+            "nodes_of_G2Labels",
+            "G2_nodes_of_degree",
+        ],
     )
     StateParameters = collections.namedtuple(
         "StateParameters",
@@ -64,11 +73,19 @@ class TestCandidateSelection:
             self.G2.nodes[n]["label"] = "blue"
 
         G1_labels, G2_labels = self.get_labels()
-        graph_params = self.GraphParameters(self.G1, self.G2, G1_labels, G2_labels)
+        graph_params = self.GraphParameters(
+            self.G1,
+            self.G2,
+            G1_labels,
+            G2_labels,
+            nx.utils.groups(G1_labels),
+            nx.utils.groups(G2_labels),
+            nx.utils.groups({node: degree for node, degree in self.G2.degree()}),
+        )
         state_params = self.StateParameters(dict(), dict(), None, None, None, None)
 
         for node in self.G1.nodes():
-            assert self.mapped_nodes[node] in find_candidates(
+            assert self.mapped_nodes[node] in _find_candidates(
                 node, graph_params, state_params
             )
 
@@ -91,10 +108,18 @@ class TestCandidateSelection:
 
         G1_labels, G2_labels = self.get_labels()
 
-        graph_params = self.GraphParameters(self.G1, self.G2, G1_labels, G2_labels)
+        graph_params = self.GraphParameters(
+            self.G1,
+            self.G2,
+            G1_labels,
+            G2_labels,
+            nx.utils.groups(G1_labels),
+            nx.utils.groups(G2_labels),
+            nx.utils.groups({node: degree for node, degree in self.G2.degree()}),
+        )
         state_params = self.StateParameters(dict(), dict(), None, None, None, None)
 
         for node in self.G1.nodes():
-            candidates = find_candidates(node, graph_params, state_params)
+            candidates = _find_candidates(node, graph_params, state_params)
             assert len(candidates) == 1
             assert self.mapped_nodes[node] in candidates
