@@ -1,6 +1,5 @@
-import collections
-
 import networkx as nx
+from inc.vf2pp import _GraphParameters, _StateParameters
 from inc.Helpers.state import (
     _restore_Tinout,
     _update_Tinout,
@@ -8,118 +7,155 @@ from inc.Helpers.state import (
 
 
 class TestTinoutUpdating:
-    V = 500
-    G = nx.gnp_random_graph(V, 0.6, seed=24)
+    edges = [
+        (1, 3),
+        (2, 3),
+        (3, 4),
+        (4, 9),
+        (4, 5),
+        (3, 9),
+        (5, 8),
+        (5, 7),
+        (8, 7),
+        (6, 7),
+    ]
+    mapped = {
+        0: "x",
+        1: "a",
+        2: "b",
+        3: "c",
+        4: "d",
+        5: "e",
+        6: "f",
+        7: "g",
+        8: "h",
+        9: "i",
+    }
+    G1 = nx.Graph()
+    G1.add_edges_from(edges)
+    G1.add_node(0)
+    G2 = nx.relabel_nodes(G1, mapping=mapped)
 
-    # initialize empty mapping
-    mapping = dict()
-    reverse_mapping = dict()
+    def test_updating(self):
+        m = dict()
+        m_rev = dict()
 
-    # initialize Ti/Ti_out
-    T1 = set()
-    T2 = set()
-    T1_out = set(G.nodes())
-    T2_out = set(G.nodes())
+        T1 = set()
+        T2 = set()
+        T1out = set(self.G1.nodes())
+        T2out = set(self.G2.nodes())
 
-    GraphParameters = collections.namedtuple(
-        "GraphParameters",
-        [
-            "G1",
-            "G2",
-            "G1_labels",
-            "G2_labels",
-            "nodes_of_G1Labels",
-            "nodes_of_G2Labels",
-            "G2_nodes_of_degree",
-        ],
-    )
-    StateParameters = collections.namedtuple(
-        "StateParameters",
-        ["mapping", "reverse_mapping", "T1", "T1_out", "T2", "T2_out"],
-    )
+        gparams = _GraphParameters(self.G1, self.G2, {}, {}, {}, {}, {})
+        sparams = _StateParameters(m, m_rev, T1, T1out, T2, T2out)
 
-    def compute_Ti(self, G1, G2):
-        T1 = {
-            nbr for node in self.mapping for nbr in G1[node] if nbr not in self.mapping
-        }
-        T2 = {
-            nbr
-            for node in self.reverse_mapping
-            for nbr in G2[node]
-            if nbr not in self.reverse_mapping
-        }
-        T1_out = {n1 for n1 in G1.nodes() if n1 not in self.mapping and n1 not in T1}
-        T2_out = {
-            n2 for n2 in G2.nodes() if n2 not in self.reverse_mapping and n2 not in T2
-        }
+        # Add node to the mapping
+        m.update({4: self.mapped[4]})
+        m_rev.update({self.mapped[4]: 4})
+        _update_Tinout(4, self.mapped[4], gparams, sparams)
 
-        return T1, T2, T1_out, T2_out
+        assert T1 == {3, 5, 9}
+        assert T2 == {"c", "i", "e"}
+        assert T1out == {0, 1, 2, 6, 7, 8}
+        assert T2out == {"x", "a", "b", "f", "g", "h"}
 
-    def test_incremental_updating(self):
-        # Check initialial conditions
-        correct_T1, correct_T2, correct_T1_out, correct_T2_out = self.compute_Ti(
-            self.G, self.G
-        )
+        # Add node to the mapping
+        m.update({5: self.mapped[5]})
+        m_rev.update({self.mapped[5]: 5})
+        _update_Tinout(5, self.mapped[5], gparams, sparams)
 
-        assert correct_T1 == self.T1
-        assert correct_T2 == self.T2
-        assert correct_T1_out == self.T1_out
-        assert correct_T2_out == self.T2_out
+        assert T1 == {3, 9, 8, 7}
+        assert T2 == {"c", "i", "h", "g"}
+        assert T1out == {0, 1, 2, 6}
+        assert T2out == {"x", "a", "b", "f"}
 
-        graph_params = self.GraphParameters(
-            self.G, self.G, None, None, None, None, None
-        )
-        state_params = self.StateParameters(
-            self.mapping,
-            self.reverse_mapping,
-            self.T1,
-            self.T1_out,
-            self.T2,
-            self.T2_out,
-        )
+        # Add node to the mapping
+        m.update({6: self.mapped[6]})
+        m_rev.update({self.mapped[6]: 6})
+        _update_Tinout(6, self.mapped[6], gparams, sparams)
 
-        # Gradually update the mapping until all nodes are mapped, and validate the Ti updating
-        for node in self.G.nodes():
-            self.mapping.update({node: node})
-            self.reverse_mapping.update({node: node})
+        assert T1 == {3, 9, 8, 7}
+        assert T2 == {"c", "i", "h", "g"}
+        assert T1out == {0, 1, 2}
+        assert T2out == {"x", "a", "b"}
 
-            correct_T1, correct_T2, correct_T1_out, correct_T2_out = self.compute_Ti(
-                self.G, self.G
-            )
-            _update_Tinout(node, node, graph_params, state_params)
-            assert correct_T1 == self.T1
-            assert correct_T2 == self.T2
-            assert correct_T1_out == self.T1_out
-            assert correct_T2_out == self.T2_out
+        # Add node to the mapping
+        m.update({3: self.mapped[3]})
+        m_rev.update({self.mapped[3]: 3})
+        _update_Tinout(3, self.mapped[3], gparams, sparams)
+
+        assert T1 == {1, 2, 9, 8, 7}
+        assert T2 == {"a", "b", "i", "h", "g"}
+        assert T1out == {0}
+        assert T2out == {"x"}
+
+        # Add node to the mapping
+        m.update({0: self.mapped[0]})
+        m_rev.update({self.mapped[0]: 0})
+        _update_Tinout(0, self.mapped[0], gparams, sparams)
+
+        assert T1 == {1, 2, 9, 8, 7}
+        assert T2 == {"a", "b", "i", "h", "g"}
+        assert T1out == set()
+        assert T2out == set()
 
     def test_restoring(self):
-        # Create a dummy mapping
-        self.mapping = {node: node for node in self.G.nodes()}
-        self.reverse_mapping = {node: node for node in self.G.nodes()}
+        m = {0: "x", 3: "c", 4: "d", 5: "e", 6: "f"}
+        m_rev = {"x": 0, "c": 3, "d": 4, "e": 5, "f": 6}
 
-        # Initialize Ti/Ti_out
-        self.T1, self.T2, self.T1_out, self.T2_out = self.compute_Ti(self.G, self.G)
+        T1 = {1, 2, 7, 9, 8}
+        T2 = {"a", "b", "g", "i", "h"}
+        T1out = set()
+        T2out = set()
 
-        graph_params = self.GraphParameters(
-            self.G, self.G, None, None, None, None, None
-        )
-        state_params = self.StateParameters(
-            self.mapping,
-            self.reverse_mapping,
-            self.T1,
-            self.T1_out,
-            self.T2,
-            self.T2_out,
-        )
+        gparams = _GraphParameters(self.G1, self.G2, {}, {}, {}, {}, {})
+        sparams = _StateParameters(m, m_rev, T1, T1out, T2, T2out)
 
-        # Remove every node from the mapping one by one and verify the correct restoring of Ti/Ti_out
-        for node in [key_node for key_node in self.mapping.keys()]:
-            self.mapping.pop(node)
-            self.reverse_mapping.pop(node)
+        # Remove a node from the mapping
+        m.pop(0)
+        m_rev.pop("x")
+        _restore_Tinout(0, self.mapped[0], gparams, sparams)
 
-            T1, T2, T1_out, T2_out = self.compute_Ti(self.G, self.G)
-            _restore_Tinout(node, node, graph_params, state_params)
-            assert self.T1 == T1
-            assert self.T2 == T2
-            assert self.T1_out == T1_out
-            assert self.T2_out == T2_out
+        assert T1 == {1, 2, 7, 9, 8}
+        assert T2 == {"a", "b", "g", "i", "h"}
+        assert T1out == {0}
+        assert T2out == {"x"}
+
+        # Remove a node from the mapping
+        m.pop(6)
+        m_rev.pop("f")
+        _restore_Tinout(6, self.mapped[6], gparams, sparams)
+
+        assert T1 == {1, 2, 7, 9, 8}
+        assert T2 == {"a", "b", "g", "i", "h"}
+        assert T1out == {0, 6}
+        assert T2out == {"x", "f"}
+
+        # Remove a node from the mapping
+        m.pop(3)
+        m_rev.pop("c")
+        _restore_Tinout(3, self.mapped[3], gparams, sparams)
+
+        assert T1 == {7, 9, 8, 3}
+        assert T2 == {"g", "i", "h", "c"}
+        assert T1out == {0, 6, 1, 2}
+        assert T2out == {"x", "f", "a", "b"}
+
+        # Remove a node from the mapping
+        m.pop(5)
+        m_rev.pop("e")
+        _restore_Tinout(5, self.mapped[5], gparams, sparams)
+
+        assert T1 == {9, 3, 5}
+        assert T2 == {"i", "c", "e"}
+        assert T1out == {0, 6, 1, 2, 7, 8}
+        assert T2out == {"x", "f", "a", "b", "g", "h"}
+
+        # Remove a node from the mapping
+        m.pop(4)
+        m_rev.pop("d")
+        _restore_Tinout(4, self.mapped[4], gparams, sparams)
+
+        assert T1 == set()
+        assert T2 == set()
+        assert T1out == set(self.G1.nodes())
+        assert T2out == set(self.G2.nodes())

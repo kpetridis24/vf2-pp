@@ -1,13 +1,14 @@
-import collections
+import itertools
+
+import utils
 
 import networkx as nx
+from inc.vf2pp import _GraphParameters, _StateParameters
 from inc.Helpers.candidates import _find_candidates
 
 
 class TestCandidateSelection:
     G1 = nx.Graph()
-    G2 = nx.Graph()
-
     G1_edges = [
         (1, 2),
         (1, 4),
@@ -22,104 +23,258 @@ class TestCandidateSelection:
         (8, 9),
         (7, 9),
     ]
-    G2_edges = [
-        (1, 2),
-        (2, 3),
-        (3, 4),
-        (1, 4),
-        (4, 9),
-        (9, 8),
-        (8, 7),
-        (7, 6),
-        (8, 6),
-        (9, 6),
-        (5, 6),
-        (5, 9),
-    ]
+    mapped = {
+        0: "x",
+        1: "a",
+        2: "b",
+        3: "c",
+        4: "d",
+        5: "e",
+        6: "f",
+        7: "g",
+        8: "h",
+        9: "i",
+    }
 
     G1.add_edges_from(G1_edges)
-    G2.add_edges_from(G2_edges)
     G1.add_node(0)
-    G2.add_node(0)
+    G2 = nx.relabel_nodes(G1, mapped)
 
-    mapped_nodes = {0: 0, 1: 9, 2: 8, 3: 7, 4: 6, 5: 5, 6: 4, 7: 1, 8: 3, 9: 2}
-
-    GraphParameters = collections.namedtuple(
-        "GraphParameters",
-        [
-            "G1",
-            "G2",
-            "G1_labels",
-            "G2_labels",
-            "nodes_of_G1Labels",
-            "nodes_of_G2Labels",
-            "G2_nodes_of_degree",
-        ],
-    )
-    StateParameters = collections.namedtuple(
-        "StateParameters",
-        ["mapping", "reverse_mapping", "T1", "T1_out", "T2", "T2_out"],
-    )
-
-    def get_labels(self):
-        return (
-            {node: self.G1.nodes[node]["label"] for node in self.G1.nodes()},
-            {node: self.G2.nodes[node]["label"] for node in self.G2.nodes()},
-        )
-
-    def test_same_labels(self):
-        for n in self.G1.nodes():
-            self.G1.nodes[n]["label"] = "blue"
-            self.G2.nodes[n]["label"] = "blue"
-
-        G1_labels, G2_labels = self.get_labels()
-        graph_params = self.GraphParameters(
+    def test_no_covered_neighbors_no_labels(self):
+        l1, l2 = utils.get_labels(
             self.G1,
             self.G2,
-            G1_labels,
-            G2_labels,
-            nx.utils.groups(G1_labels),
-            nx.utils.groups(G2_labels),
-            nx.utils.groups({node: degree for node, degree in self.G2.degree()}),
         )
-        state_params = self.StateParameters(dict(), dict(), None, None, None, None)
-
-        for node in self.G1.nodes():
-            assert self.mapped_nodes[node] in _find_candidates(
-                node, graph_params, state_params
-            )
-
-    def test_different_labels(self):
-        colors = [
-            "white",
-            "black",
-            "green",
-            "purple",
-            "orange",
-            "red",
-            "blue",
-            "pink",
-            "yellow",
-            "none",
-        ]
-        for node, color in zip(self.G1.nodes, colors):
-            self.G1.nodes[node]["label"] = color
-            self.G2.nodes[self.mapped_nodes[node]]["label"] = color
-
-        G1_labels, G2_labels = self.get_labels()
-
-        graph_params = self.GraphParameters(
+        gparams = _GraphParameters(
             self.G1,
             self.G2,
-            G1_labels,
-            G2_labels,
-            nx.utils.groups(G1_labels),
-            nx.utils.groups(G2_labels),
+            l1,
+            l2,
+            nx.utils.groups(l1),
+            nx.utils.groups(l2),
             nx.utils.groups({node: degree for node, degree in self.G2.degree()}),
         )
-        state_params = self.StateParameters(dict(), dict(), None, None, None, None)
 
-        for node in self.G1.nodes():
-            candidates = _find_candidates(node, graph_params, state_params)
-            assert len(candidates) == 1
-            assert self.mapped_nodes[node] in candidates
+        m = {9: self.mapped[9], 1: self.mapped[1]}
+        m_rev = {self.mapped[9]: 9, self.mapped[1]: 1}
+
+        T1 = {7, 8, 2, 4, 5}
+        T1_out = {0, 3, 6}
+        T2 = {"g", "h", "b", "d", "e"}
+        T2_out = {"x", "c", "f"}
+
+        sparams = _StateParameters(m, m_rev, T1, T1_out, T2, T2_out)
+
+        u = 3
+        candidates = _find_candidates(u, gparams, sparams)
+        assert candidates == {self.mapped[u]}
+
+        u = 0
+        candidates = _find_candidates(u, gparams, sparams)
+        assert candidates == {self.mapped[u]}
+
+        m.pop(9)
+        m_rev.pop(self.mapped[9])
+
+        T1 = {2, 4, 5, 6}
+        T1_out = {0, 3, 7, 8, 9}
+        T2 = {"g", "h", "b", "d", "e", "f"}
+        T2_out = {"x", "c", "g", "h", "i"}
+
+        sparams = _StateParameters(m, m_rev, T1, T1_out, T2, T2_out)
+
+        u = 7
+        candidates = _find_candidates(u, gparams, sparams)
+        assert candidates == {
+            self.mapped[u],
+            self.mapped[8],
+            self.mapped[3],
+            self.mapped[9],
+        }
+
+    def test_no_covered_neighbors_with_labels(self):
+        nx.set_node_attributes(
+            self.G1,
+            dict(zip(self.G1, itertools.cycle(utils.labels_different))),
+            "label",
+        )
+        nx.set_node_attributes(
+            self.G2,
+            dict(
+                zip(
+                    [self.mapped[n] for n in self.G1],
+                    itertools.cycle(utils.labels_different),
+                )
+            ),
+            "label",
+        )
+        l1, l2 = utils.get_labels(self.G1, self.G2, has_labels=True)
+        gparams = _GraphParameters(
+            self.G1,
+            self.G2,
+            l1,
+            l2,
+            nx.utils.groups(l1),
+            nx.utils.groups(l2),
+            nx.utils.groups({node: degree for node, degree in self.G2.degree()}),
+        )
+
+        m = {9: self.mapped[9], 1: self.mapped[1]}
+        m_rev = {self.mapped[9]: 9, self.mapped[1]: 1}
+
+        T1 = {7, 8, 2, 4, 5, 6}
+        T1_out = {0, 3}
+        T2 = {"g", "h", "b", "d", "e", "f"}
+        T2_out = {"x", "c"}
+
+        sparams = _StateParameters(m, m_rev, T1, T1_out, T2, T2_out)
+
+        u = 3
+        candidates = _find_candidates(u, gparams, sparams)
+        assert candidates == {self.mapped[u]}
+
+        u = 0
+        candidates = _find_candidates(u, gparams, sparams)
+        assert candidates == {self.mapped[u]}
+
+        # Change label of disconnected node
+        self.G1.nodes[u]["label"] = "blue"
+        l1, l2 = utils.get_labels(self.G1, self.G2, has_labels=True)
+        gparams = _GraphParameters(
+            self.G1,
+            self.G2,
+            l1,
+            l2,
+            nx.utils.groups(l1),
+            nx.utils.groups(l2),
+            nx.utils.groups({node: degree for node, degree in self.G2.degree()}),
+        )
+
+        # No candidate
+        candidates = _find_candidates(u, gparams, sparams)
+        assert candidates == set()
+
+        m.pop(9)
+        m_rev.pop(self.mapped[9])
+
+        T1 = {2, 4, 5, 6}
+        T1_out = {0, 3, 7, 8, 9}
+        T2 = {"b", "d", "e", "f"}
+        T2_out = {"x", "c", "g", "h", "i"}
+
+        sparams = _StateParameters(m, m_rev, T1, T1_out, T2, T2_out)
+
+        u = 7
+        candidates = _find_candidates(u, gparams, sparams)
+        assert candidates == {self.mapped[u]}
+
+        self.G1.nodes[8]["label"] = self.G1.nodes[7]["label"]
+        self.G2.nodes[self.mapped[8]]["label"] = self.G1.nodes[7]["label"]
+        l1, l2 = utils.get_labels(self.G1, self.G2, has_labels=True)
+        gparams = _GraphParameters(
+            self.G1,
+            self.G2,
+            l1,
+            l2,
+            nx.utils.groups(l1),
+            nx.utils.groups(l2),
+            nx.utils.groups({node: degree for node, degree in self.G2.degree()}),
+        )
+
+        candidates = _find_candidates(u, gparams, sparams)
+        assert candidates == {self.mapped[u], self.mapped[8]}
+
+    def test_covered_neighbors_no_labels(self):
+        l1, l2 = utils.get_labels(
+            self.G1,
+            self.G2,
+        )
+        gparams = _GraphParameters(
+            self.G1,
+            self.G2,
+            l1,
+            l2,
+            nx.utils.groups(l1),
+            nx.utils.groups(l2),
+            nx.utils.groups({node: degree for node, degree in self.G2.degree()}),
+        )
+
+        m = {9: self.mapped[9], 1: self.mapped[1]}
+        m_rev = {self.mapped[9]: 9, self.mapped[1]: 1}
+
+        T1 = {7, 8, 2, 4, 5, 6}
+        T1_out = {0, 3}
+        T2 = {"g", "h", "b", "d", "e", "f"}
+        T2_out = {"x", "c"}
+
+        sparams = _StateParameters(m, m_rev, T1, T1_out, T2, T2_out)
+
+        u = 5
+        candidates = _find_candidates(u, gparams, sparams)
+        assert candidates == {self.mapped[u]}
+
+        u = 6
+        candidates = _find_candidates(u, gparams, sparams)
+        assert candidates == {self.mapped[u], self.mapped[2]}
+
+    def test_covered_neighbors_with_labels(self):
+        nx.set_node_attributes(
+            self.G1,
+            dict(zip(self.G1, itertools.cycle(utils.labels_different))),
+            "label",
+        )
+        nx.set_node_attributes(
+            self.G2,
+            dict(
+                zip(
+                    [self.mapped[n] for n in self.G1],
+                    itertools.cycle(utils.labels_different),
+                )
+            ),
+            "label",
+        )
+        l1, l2 = utils.get_labels(self.G1, self.G2, has_labels=True)
+        gparams = _GraphParameters(
+            self.G1,
+            self.G2,
+            l1,
+            l2,
+            nx.utils.groups(l1),
+            nx.utils.groups(l2),
+            nx.utils.groups({node: degree for node, degree in self.G2.degree()}),
+        )
+
+        m = {9: self.mapped[9], 1: self.mapped[1]}
+        m_rev = {self.mapped[9]: 9, self.mapped[1]: 1}
+
+        T1 = {7, 8, 2, 4, 5, 6}
+        T1_out = {0, 3}
+        T2 = {"g", "h", "b", "d", "e", "f"}
+        T2_out = {"x", "c"}
+
+        sparams = _StateParameters(m, m_rev, T1, T1_out, T2, T2_out)
+
+        u = 5
+        candidates = _find_candidates(u, gparams, sparams)
+        assert candidates == {self.mapped[u]}
+
+        u = 6
+        candidates = _find_candidates(u, gparams, sparams)
+        assert candidates == {self.mapped[u]}
+
+        # Assign to 2, the same label as 6
+        self.G1.nodes[2]["label"] = self.G1.nodes[u]["label"]
+        self.G2.nodes[self.mapped[2]]["label"] = self.G1.nodes[u]["label"]
+        l1, l2 = utils.get_labels(self.G1, self.G2, has_labels=True)
+        gparams = _GraphParameters(
+            self.G1,
+            self.G2,
+            l1,
+            l2,
+            nx.utils.groups(l1),
+            nx.utils.groups(l2),
+            nx.utils.groups({node: degree for node, degree in self.G2.degree()}),
+        )
+
+        candidates = _find_candidates(u, gparams, sparams)
+        assert candidates == {self.mapped[u], self.mapped[2]}

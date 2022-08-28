@@ -43,14 +43,12 @@ def _feasibility(node1, node2, graph_params, state_params):
     -------
     True if all checks are successful, False otherwise.
     """
-    G1, G2 = graph_params.G1, graph_params.G2
-    if G1.number_of_edges(node1, node1) != G2.number_of_edges(node2, node2):
-        return False
+    G1 = graph_params.G1
 
     if _cut_PT(node1, node2, graph_params, state_params):
         return False
 
-    if isinstance(G1, nx.MultiGraph):
+    if G1.is_multigraph():
         if not _consistent_PT(node1, node2, graph_params, state_params):
             return False
 
@@ -117,9 +115,9 @@ def _cut_PT(u, v, graph_params, state_params):
             ):
                 return True
 
-        if len(T1.intersection(G1_nbh)) != len(T2.intersection(G2_nbh)) or len(
-            T1_out.intersection(G1_nbh)
-        ) != len(T2_out.intersection(G2_nbh)):
+        if len(T1.intersection(G1_nbh)) != len(T2.intersection(G2_nbh)):
+            return True
+        if len(T1_out.intersection(G1_nbh)) != len(T2_out.intersection(G2_nbh)):
             return True
 
     return False

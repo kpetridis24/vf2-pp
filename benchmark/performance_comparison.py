@@ -6,7 +6,7 @@ import networkx as nx
 from inc.vf2pp import vf2pp_is_isomorphic
 
 
-class PerformanceComparison:
+class VF2VF2ppComparison:
     def __init__(self, number_of_nodes):
         self.number_of_nodes = number_of_nodes
         self.vf2_times = []
@@ -34,15 +34,12 @@ class PerformanceComparison:
 
     def compare_in_random_graphs(self, prob=0.5):
         for V in self.number_of_nodes:
+            print(f"V = {V}")
             G1 = nx.gnp_random_graph(V, p=prob, seed=39)
             G2 = nx.gnp_random_graph(V, p=prob, seed=39)
 
-            for n in G1.nodes():
-                G1.nodes[n]["label"] = "blue"
-                G2.nodes[n]["label"] = "blue"
-
             t0 = time.time()
-            _ = vf2pp_is_isomorphic(G1, G2, node_labels="label")
+            _ = vf2pp_is_isomorphic(G1, G2, node_labels=None)
             dur1 = time.time() - t0
 
             t0 = time.time()
@@ -96,9 +93,7 @@ class PerformanceComparison:
 
 
 if __name__ == "__main__":
-    nodes = range(100, 500, 100)
-    benchmark = PerformanceComparison(nodes)
-
-    benchmark.compare_in_random_graphs(0.6)
+    benchmark = VF2VF2ppComparison(range(100, 2000, 100))
+    benchmark.compare_in_random_graphs()
     benchmark.plot_times()
     benchmark.plot_speedup()

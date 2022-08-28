@@ -1,6 +1,3 @@
-from inc.Helpers.candidates import _find_candidates
-
-
 def _update_Tinout(new_node1, new_node2, graph_params, state_params):
     """Updates the Ti/Ti_out (i=1,2) when a new node pair u-v is added to the mapping.
 
@@ -13,7 +10,7 @@ def _update_Tinout(new_node1, new_node2, graph_params, state_params):
 
     Parameters
     ----------
-    new_node1, new_node2: int
+    new_node1, new_node2: Graph node
         The two new nodes, added to the mapping.
 
     graph_params: namedtuple
@@ -50,15 +47,15 @@ def _update_Tinout(new_node1, new_node2, graph_params, state_params):
     }
 
     # Add the uncovered neighbors of node1 and node2 in T1 and T2 respectively
-    T1.discard(new_node1)
-    T2.discard(new_node2)
     T1.update(uncovered_neighbors_G1)
     T2.update(uncovered_neighbors_G2)
+    T1.discard(new_node1)
+    T2.discard(new_node2)
 
-    T1_out.discard(new_node1)
-    T2_out.discard(new_node2)
     T1_out.difference_update(uncovered_neighbors_G1)
     T2_out.difference_update(uncovered_neighbors_G2)
+    T1_out.discard(new_node1)
+    T2_out.discard(new_node2)
 
 
 def _restore_Tinout(popped_node1, popped_node2, graph_params, state_params):
@@ -66,7 +63,7 @@ def _restore_Tinout(popped_node1, popped_node2, graph_params, state_params):
 
     Parameters
     ----------
-    popped_node1, popped_node2: int
+    popped_node1, popped_node2: Graph node
         The two nodes deleted from the mapping.
 
     graph_params: namedtuple
@@ -128,98 +125,3 @@ def _restore_Tinout(popped_node1, popped_node2, graph_params, state_params):
 
     if not is_added:
         T2_out.add(popped_node2)
-
-
-def _update_state(
-    node, candidate, matching_node, order, stack, graph_params, state_params
-):
-    """Updates all the necessary parameters of VF2++, after a successful node matching
-
-    Parameters
-    ----------
-    node, candidate: Graph node
-        The matched node pair, just added to the mapping
-
-    matching_node: int
-        Index, keeping track of the currently examined node from the ordering
-
-    order: list
-        The node ordering as computed by the VF2++ pre-processing
-
-    stack: list
-        The DFS stack, storing each node, along with its candidates
-
-    graph_params: namedtuple
-        Contains all the Graph-related parameters:
-
-        G1,G2: NetworkX Graph or MultiGraph instances.
-            The two graphs to check for isomorphism or monomorphism
-
-        G1_labels,G2_labels: dict
-            The label of every node in G1 and G2 respectively
-
-    state_params: namedtuple
-        Contains all the State-related parameters:
-
-        mapping: dict
-            The mapping as extended so far. Maps nodes of G1 to nodes of G2
-
-        reverse_mapping: dict
-            The reverse mapping as extended so far. Maps nodes from G2 to nodes of G1. It's basically "mapping" reversed
-
-        T1, T2: set
-            Ti contains uncovered neighbors of covered nodes from Gi, i.e. nodes that are not in the mapping, but are
-            neighbors of nodes that are.
-
-        T1_out, T2_out: set
-            Ti_out contains all the nodes from Gi, that are neither in the mapping nor in Ti
-    """
-    state_params.mapping.update({node: candidate})
-    state_params.reverse_mapping.update({candidate: node})
-    _update_Tinout(node, candidate, graph_params, state_params)
-
-    next_node = order[matching_node]
-    candidates = _find_candidates(next_node, graph_params, state_params)
-    stack.append((next_node, iter(candidates)))
-
-
-def _restore_state(stack, graph_params, state_params):
-    """Restores the previous DFS state, when a node pair is popped from the mapping, in case of exhaustion of the
-    candidates for a specific node
-
-    Parameters
-    ----------
-    stack: list
-        The DFS stack, storing each node, along with its candidates
-
-    graph_params: namedtuple
-        Contains all the Graph-related parameters:
-
-        G1,G2: NetworkX Graph or MultiGraph instances.
-            The two graphs to check for isomorphism or monomorphism
-
-        G1_labels,G2_labels: dict
-            The label of every node in G1 and G2 respectively
-
-    state_params: namedtuple
-        Contains all the State-related parameters:
-
-        mapping: dict
-            The mapping as extended so far. Maps nodes of G1 to nodes of G2
-
-        reverse_mapping: dict
-            The reverse mapping as extended so far. Maps nodes from G2 to nodes of G1. It's basically "mapping" reversed
-
-        T1, T2: set
-            Ti contains uncovered neighbors of covered nodes from Gi, i.e. nodes that are not in the mapping, but are
-            neighbors of nodes that are.
-
-        T1_out, T2_out: set
-            Ti_out contains all the nodes from Gi, that are neither in the mapping nor in Ti
-    """
-    popped_node1, _ = stack[-1]
-    popped_node2 = state_params.mapping[popped_node1]
-    state_params.mapping.pop(popped_node1)
-    state_params.reverse_mapping.pop(popped_node2)
-
-    _restore_Tinout(popped_node1, popped_node2, graph_params, state_params)

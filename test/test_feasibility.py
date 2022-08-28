@@ -1,57 +1,21 @@
-import collections
-
 import networkx as nx
-from inc.vf2pp import _feasibility
+from inc.vf2pp import (
+    _feasibility,
+    _GraphParameters,
+    _StateParameters,
+)
 from inc.Helpers.feasibility import (
     _consistent_PT,
     _cut_PT,
 )
 
 
-def compute_Ti(G1, G2, mapping, reverse_mapping):
-    T1 = {nbr for node in mapping for nbr in G1[node] if nbr not in mapping}
-    T2 = {
-        nbr
-        for node in reverse_mapping
-        for nbr in G2[node]
-        if nbr not in reverse_mapping
-    }
-
-    T1_out = {n1 for n1 in G1.nodes() if n1 not in mapping and n1 not in T1}
-    T2_out = {n2 for n2 in G2.nodes() if n2 not in reverse_mapping and n2 not in T2}
-    return T1, T2, T1_out, T2_out
-
-
 class TestGraphISOFeasibility:
-    GraphParameters = collections.namedtuple(
-        "GraphParameters",
-        [
-            "G1",
-            "G2",
-            "G1_labels",
-            "G2_labels",
-            "nodes_of_G1Labels",
-            "nodes_of_G2Labels",
-            "G2_nodes_of_degree",
-        ],
-    )
-    StateParameters = collections.namedtuple(
-        "StateParameters",
-        ["mapping", "reverse_mapping", "T1", "T1_out", "T2", "T2_out"],
-    )
-
-    def test_different_number_of_selfloops(self):
-        G1 = nx.Graph([(0, 0)])
-        G2 = nx.Graph([(1, 2), (2, 3)])
-        gparams = self.GraphParameters(G1, G2, None, None, None, None, None)
-        u, v = 0, 1
-        assert not _feasibility(u, v, gparams, None)
-
     def test_const_covered_neighbors(self):
         G1 = nx.Graph([(0, 1), (1, 2), (3, 0), (3, 2)])
         G2 = nx.Graph([("a", "b"), ("b", "c"), ("k", "a"), ("k", "c")])
-        gparams = self.GraphParameters(G1, G2, None, None, None, None, None)
-        sparams = self.StateParameters(
+        gparams = _GraphParameters(G1, G2, None, None, None, None, None)
+        sparams = _StateParameters(
             {0: "a", 1: "b", 2: "c"}, {"a": 0, "b": 1, "c": 2}, None, None, None, None
         )
         u, v = 3, "k"
@@ -60,8 +24,8 @@ class TestGraphISOFeasibility:
     def test_const_no_covered_neighbors(self):
         G1 = nx.Graph([(0, 1), (1, 2), (3, 4), (3, 5)])
         G2 = nx.Graph([("a", "b"), ("b", "c"), ("k", "w"), ("k", "z")])
-        gparams = self.GraphParameters(G1, G2, None, None, None, None, None)
-        sparams = self.StateParameters(
+        gparams = _GraphParameters(G1, G2, None, None, None, None, None)
+        sparams = _StateParameters(
             {0: "a", 1: "b", 2: "c"}, {"a": 0, "b": 1, "c": 2}, None, None, None, None
         )
         u, v = 3, "k"
@@ -72,8 +36,8 @@ class TestGraphISOFeasibility:
         G2 = nx.Graph(
             [("a", "b"), ("b", "c"), ("k", "a"), ("k", "c"), ("k", "w"), ("k", "z")]
         )
-        gparams = self.GraphParameters(G1, G2, None, None, None, None, None)
-        sparams = self.StateParameters(
+        gparams = _GraphParameters(G1, G2, None, None, None, None, None)
+        sparams = _StateParameters(
             {0: "a", 1: "b", 2: "c"}, {"a": 0, "b": 1, "c": 2}, None, None, None, None
         )
         u, v = 3, "k"
@@ -106,8 +70,8 @@ class TestGraphISOFeasibility:
                 ("f", "d"),
             ]
         )
-        gparams = self.GraphParameters(G1, G2, None, None, None, None, None)
-        sparams = self.StateParameters(
+        gparams = _GraphParameters(G1, G2, None, None, None, None, None)
+        sparams = _StateParameters(
             {0: "a", 1: "b", 2: "c", 3: "d"},
             {"a": 0, "b": 1, "c": 2, "d": 3},
             None,
@@ -180,10 +144,10 @@ class TestGraphISOFeasibility:
         l2 = {n: "blue" for n in G2.nodes()}
         l1.update({6: "green"})  # Change the label of one neighbor of u
 
-        gparams = self.GraphParameters(
+        gparams = _GraphParameters(
             G1, G2, l1, l2, nx.utils.groups(l1), nx.utils.groups(l2), None
         )
-        sparams = self.StateParameters(
+        sparams = _StateParameters(
             {0: "a", 1: "b", 2: "c", 3: "d"},
             {"a": 0, "b": 1, "c": 2, "d": 3},
             None,
@@ -226,10 +190,10 @@ class TestGraphISOFeasibility:
         l1 = {n: "blue" for n in G1.nodes()}
         l2 = {n: "blue" for n in G2.nodes()}
 
-        gparams = self.GraphParameters(
+        gparams = _GraphParameters(
             G1, G2, l1, l2, nx.utils.groups(l1), nx.utils.groups(l2), None
         )
-        sparams = self.StateParameters(
+        sparams = _StateParameters(
             {0: "a", 1: "b", 2: "c", 3: "d"},
             {"a": 0, "b": 1, "c": 2, "d": 3},
             {4, 5},
@@ -260,10 +224,10 @@ class TestGraphISOFeasibility:
         l1 = {n: "blue" for n in G1.nodes()}
         l2 = {n: "blue" for n in G2.nodes()}
 
-        gparams = self.GraphParameters(
+        gparams = _GraphParameters(
             G1, G2, l1, l2, nx.utils.groups(l1), nx.utils.groups(l2), None
         )
-        sparams = self.StateParameters(
+        sparams = _StateParameters(
             {0: "a", 1: "b", 2: "c", 3: "d"},
             {"a": 0, "b": 1, "c": 2, "d": 3},
             {4, 5},
@@ -299,7 +263,7 @@ class TestGraphISOFeasibility:
 
         l1 = {n: "blue" for n in G1.nodes()}
         l2 = {n: "blue" for n in G2.nodes()}
-        gparams = self.GraphParameters(
+        gparams = _GraphParameters(
             G1, G2, l1, l2, nx.utils.groups(l1), nx.utils.groups(l2), None
         )
 
@@ -327,7 +291,7 @@ class TestGraphISOFeasibility:
         G2.add_edges_from([(v, "i"), (v, "j")])
         l1 = {n: "blue" for n in G1.nodes()}
         l2 = {n: "blue" for n in G2.nodes()}
-        gparams = self.GraphParameters(
+        gparams = _GraphParameters(
             G1, G2, l1, l2, nx.utils.groups(l1), nx.utils.groups(l2), None
         )
 
@@ -410,10 +374,10 @@ class TestGraphISOFeasibility:
         )
         l2.update({mapped[n]: l for n, l in l1.items()})
 
-        gparams = self.GraphParameters(
+        gparams = _GraphParameters(
             G1, G2, l1, l2, nx.utils.groups(l1), nx.utils.groups(l2), None
         )
-        sparams = self.StateParameters(
+        sparams = _StateParameters(
             {0: "a", 1: "b", 2: "c", 3: "d"},
             {"a": 0, "b": 1, "c": 2, "d": 3},
             {4, 5, 6, 7, 14},
@@ -521,10 +485,10 @@ class TestGraphISOFeasibility:
         l1 = {n: "blue" for n in G1.nodes()}
         l2 = {mapped[n]: "blue" for n in G1.nodes()}
 
-        gparams = self.GraphParameters(
+        gparams = _GraphParameters(
             G1, G2, l1, l2, nx.utils.groups(l1), nx.utils.groups(l2), None
         )
-        sparams = self.StateParameters(
+        sparams = _StateParameters(
             {0: "a", 1: "b", 2: "c", 3: "d"},
             {"a": 0, "b": 1, "c": 2, "d": 3},
             {4, 5, 6, 7, 14},
@@ -619,10 +583,10 @@ class TestGraphISOFeasibility:
         )
         l2.update({mapped[n]: l for n, l in l1.items()})
 
-        gparams = self.GraphParameters(
+        gparams = _GraphParameters(
             G1, G2, l1, l2, nx.utils.groups(l1), nx.utils.groups(l2), None
         )
-        sparams = self.StateParameters(
+        sparams = _StateParameters(
             {0: "a", 1: "b", 2: "c", 3: "d"},
             {"a": 0, "b": 1, "c": 2, "d": 3},
             {4, 5, 6, 7, 14},
@@ -657,30 +621,6 @@ class TestGraphISOFeasibility:
 
 
 class TestMultiGraphISOFeasibility:
-    GraphParameters = collections.namedtuple(
-        "GraphParameters",
-        [
-            "G1",
-            "G2",
-            "G1_labels",
-            "G2_labels",
-            "nodes_of_G1Labels",
-            "nodes_of_G2Labels",
-            "G2_nodes_of_degree",
-        ],
-    )
-    StateParameters = collections.namedtuple(
-        "StateParameters",
-        ["mapping", "reverse_mapping", "T1", "T1_out", "T2", "T2_out"],
-    )
-
-    def test_different_number_of_selfloops(self):
-        G1 = nx.MultiGraph([(0, 0), (0, 0), (0, 0)])
-        G2 = nx.MultiGraph([(1, 2), (1, 1), (1, 1), (2, 3)])
-        gparams = self.GraphParameters(G1, G2, None, None, None, None, None)
-        u, v = 0, 1
-        assert not _feasibility(u, v, gparams, None)
-
     def test_const_covered_neighbors(self):
         G1 = nx.MultiGraph(
             [(0, 1), (0, 1), (1, 2), (3, 0), (3, 0), (3, 0), (3, 2), (3, 2)]
@@ -697,8 +637,8 @@ class TestMultiGraphISOFeasibility:
                 ("k", "c"),
             ]
         )
-        gparams = self.GraphParameters(G1, G2, None, None, None, None, None)
-        sparams = self.StateParameters(
+        gparams = _GraphParameters(G1, G2, None, None, None, None, None)
+        sparams = _StateParameters(
             {0: "a", 1: "b", 2: "c"}, {"a": 0, "b": 1, "c": 2}, None, None, None, None
         )
         u, v = 3, "k"
@@ -707,8 +647,8 @@ class TestMultiGraphISOFeasibility:
     def test_const_no_covered_neighbors(self):
         G1 = nx.MultiGraph([(0, 1), (0, 1), (1, 2), (3, 4), (3, 4), (3, 5)])
         G2 = nx.MultiGraph([("a", "b"), ("b", "c"), ("k", "w"), ("k", "w"), ("k", "z")])
-        gparams = self.GraphParameters(G1, G2, None, None, None, None, None)
-        sparams = self.StateParameters(
+        gparams = _GraphParameters(G1, G2, None, None, None, None, None)
+        sparams = _StateParameters(
             {0: "a", 1: "b", 2: "c"}, {"a": 0, "b": 1, "c": 2}, None, None, None, None
         )
         u, v = 3, "k"
@@ -731,8 +671,8 @@ class TestMultiGraphISOFeasibility:
                 ("k", "z"),
             ]
         )
-        gparams = self.GraphParameters(G1, G2, None, None, None, None, None)
-        sparams = self.StateParameters(
+        gparams = _GraphParameters(G1, G2, None, None, None, None, None)
+        sparams = _StateParameters(
             {0: "a", 1: "b", 2: "c"}, {"a": 0, "b": 1, "c": 2}, None, None, None, None
         )
         u, v = 3, "k"
@@ -759,8 +699,8 @@ class TestMultiGraphISOFeasibility:
         mapped = {0: "a", 1: "b", 2: "c", 3: "d", 4: "e", 5: "f", 6: "g", 10: "k"}
         G2 = nx.relabel_nodes(G1, mapped)
 
-        gparams = self.GraphParameters(G1, G2, None, None, None, None, None)
-        sparams = self.StateParameters(
+        gparams = _GraphParameters(G1, G2, None, None, None, None, None)
+        sparams = _StateParameters(
             {0: "a", 1: "b", 2: "c", 3: "d"},
             {"a": 0, "b": 1, "c": 2, "d": 3},
             None,
@@ -844,10 +784,10 @@ class TestMultiGraphISOFeasibility:
         l1 = {n: "blue" for n in G1.nodes()}
         l2 = {n: "blue" for n in G2.nodes()}
 
-        gparams = self.GraphParameters(
+        gparams = _GraphParameters(
             G1, G2, l1, l2, nx.utils.groups(l1), nx.utils.groups(l2), None
         )
-        sparams = self.StateParameters(
+        sparams = _StateParameters(
             {0: "a", 1: "b", 2: "c", 3: "d"},
             {"a": 0, "b": 1, "c": 2, "d": 3},
             {4, 5},
@@ -895,7 +835,7 @@ class TestMultiGraphISOFeasibility:
 
         l1 = {n: "blue" for n in G1.nodes()}
         l2 = {n: "blue" for n in G2.nodes()}
-        gparams = self.GraphParameters(
+        gparams = _GraphParameters(
             G1, G2, l1, l2, nx.utils.groups(l1), nx.utils.groups(l2), None
         )
 
@@ -930,7 +870,7 @@ class TestMultiGraphISOFeasibility:
         G2.add_edges_from([(v, "i"), (v, "i"), (v, "i"), (v, "j")])
         l1 = {n: "blue" for n in G1.nodes()}
         l2 = {n: "blue" for n in G2.nodes()}
-        gparams = self.GraphParameters(
+        gparams = _GraphParameters(
             G1, G2, l1, l2, nx.utils.groups(l1), nx.utils.groups(l2), None
         )
 
@@ -1022,10 +962,10 @@ class TestMultiGraphISOFeasibility:
         )
         l2.update({mapped[n]: l for n, l in l1.items()})
 
-        gparams = self.GraphParameters(
+        gparams = _GraphParameters(
             G1, G2, l1, l2, nx.utils.groups(l1), nx.utils.groups(l2), None
         )
-        sparams = self.StateParameters(
+        sparams = _StateParameters(
             {0: "a", 1: "b", 2: "c", 3: "d"},
             {"a": 0, "b": 1, "c": 2, "d": 3},
             {4, 5, 6, 7, 14},
@@ -1149,10 +1089,10 @@ class TestMultiGraphISOFeasibility:
         l1 = {n: "blue" for n in G1.nodes()}
         l2 = {mapped[n]: "blue" for n in G1.nodes()}
 
-        gparams = self.GraphParameters(
+        gparams = _GraphParameters(
             G1, G2, l1, l2, nx.utils.groups(l1), nx.utils.groups(l2), None
         )
-        sparams = self.StateParameters(
+        sparams = _StateParameters(
             {0: "a", 1: "b", 2: "c", 3: "d"},
             {"a": 0, "b": 1, "c": 2, "d": 3},
             {4, 5, 6, 7, 14},
@@ -1264,10 +1204,10 @@ class TestMultiGraphISOFeasibility:
         )
         l2.update({mapped[n]: l for n, l in l1.items()})
 
-        gparams = self.GraphParameters(
+        gparams = _GraphParameters(
             G1, G2, l1, l2, nx.utils.groups(l1), nx.utils.groups(l2), None
         )
-        sparams = self.StateParameters(
+        sparams = _StateParameters(
             {0: "a", 1: "b", 2: "c", 3: "d"},
             {"a": 0, "b": 1, "c": 2, "d": 3},
             {4, 5, 6, 7, 14},

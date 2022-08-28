@@ -1,3 +1,54 @@
+"""
+***************
+VF2++ Algorithm
+***************
+
+An implementation of the VF2++ algorithm for Graph Isomorphism testing.
+
+The simplest interface to use this module is to call:
+`vf2pp_is_isomorphic`: to check whether two graphs are isomorphic.
+`vf2pp_mapping`: to obtain the node mapping between two graphs, in case they are isomorphic.
+`vf2pp_all_mappings`: to generate all possible mappings between two graphs, if isomorphic.
+
+Introduction
+------------
+The VF2++ algorithm, follows a similar logic to that of VF2, while also introducing new easy-to-check cutting rules and
+determining the optimal access order of nodes. It is also implemented in a non-recursive manner, which saves both time
+and space, when compared to its previous counterpart.
+
+The optimal node ordering is obtained after taking into consideration both the degree but also the label rarity of each
+node. This way we place the nodes that are more likely to match, first in the order, thus examining the most promising
+branches in the beginning. The rules also consider node labels, making it easier to prune unfruitful branches early in
+the process.
+
+Examples
+--------
+
+Suppose G1 and G2 are Isomorphic Graphs. Verification is as follows:
+
+Without node labels:
+
+>>> import networkx as nx
+>>> G1 = nx.path_graph(4)
+>>> G2 = nx.path_graph(4)
+>>> nx.vf2pp_is_isomorphic(G1, G2, node_labels=None)
+True
+>>> nx.vf2pp_mapping(G1, G2, node_labels=None)
+{1: 1, 2: 2, 0: 0, 3: 3}
+
+With node labels:
+
+>>> G1 = nx.path_graph(4)
+>>> G2 = nx.path_graph(4)
+>>> mapped = {1: 1, 2: 2, 3: 3, 0: 0}
+>>> nx.set_node_attributes(G1, dict(zip(G1, ["blue", "red", "green", "yellow"])), "label")
+>>> nx.set_node_attributes(G2, dict(zip([mapped[u] for u in G1], ["blue", "red", "green", "yellow"])), "label")
+>>> nx.vf2pp_is_isomorphic(G1, G2, node_labels="label")
+True
+>>> nx.vf2pp_mapping(G1, G2, node_labels="label")
+{1: 1, 2: 2, 0: 0, 3: 3}
+
+"""
 import collections
 
 import networkx as nx
@@ -5,13 +56,32 @@ from inc.Helpers.candidates import _find_candidates
 from inc.Helpers.feasibility import _feasibility
 from inc.Helpers.node_ordering import _matching_order
 from inc.Helpers.state import (
-    _restore_state,
-    _update_state,
+    _restore_Tinout,
+    _update_Tinout,
+)
+
+__all__ = ["vf2pp_mapping", "vf2pp_is_isomorphic", "vf2pp_all_mappings"]
+
+_GraphParameters = collections.namedtuple(
+    "_GraphParameters",
+    [
+        "G1",
+        "G2",
+        "G1_labels",
+        "G2_labels",
+        "nodes_of_G1Labels",
+        "nodes_of_G2Labels",
+        "G2_nodes_of_degree",
+    ],
+)
+_StateParameters = collections.namedtuple(
+    "_StateParameters",
+    ["mapping", "reverse_mapping", "T1", "T1_out", "T2", "T2_out"],
 )
 
 
 def vf2pp_mapping(G1, G2, node_labels=None, default_label=None):
-    """Yields all the possible mappings between G1 and G2.
+    """Return an isomorphic mapping between `G1` and `G2` if it exists.
 
     Parameters
     ----------
@@ -23,6 +93,10 @@ def vf2pp_mapping(G1, G2, node_labels=None, default_label=None):
 
     default_label: Label name
         Let the user pick a default label value
+
+    Returns
+    -------
+    Node mapping, if the two graphs are isomorphic. None otherwise.
     """
     try:
         mapping = next(vf2pp_all_mappings(G1, G2, node_labels, default_label))
@@ -49,38 +123,55 @@ def vf2pp_is_isomorphic(G1, G2, node_labels=None, default_label=None):
     -------
     True if the two graphs are isomorphic. False otherwise.
     """
-    return True and not (not vf2pp_mapping(G1, G2, node_labels, default_label))
+    if vf2pp_mapping(G1, G2, node_labels, default_label) is not None:
+        return True
+    return False
 
 
 def vf2pp_all_mappings(G1, G2, node_labels=None, default_label=None):
-    """Implementation of the VF2++ algorithm.
+    """Yields all the possible mappings between G1 and G2.
 
     Parameters
     ----------
     G1,G2: NetworkX Graph or MultiGraph instances.
-        The two graphs to check for isomorphism or monomorphism.
+        The two graphs to check for isomorphism.
 
-    node_labels: Label name
-        The label name of all nodes
+    node_labels: string or None
+        The node attribute name within G that indicates node labels.
+        If None, then no node labels are used to compute isomorphisms.
 
-    default_label: Label name
-        Let the user pick a default label value
-
-    Returns
-    -------
-    Node mapping, if the two graphs are isomorphic. None otherwise.
+    default_label: string
+        The default label for nodes that have no label attribute value.
     """
-    G1_labels, G2_labels = dict(), dict()
-    if not G1 and not G2:
-        return False
-    if not _precheck(G1, G2, G1_labels, G2_labels, node_labels, default_label):
+    if G1.number_of_nodes() == 0 or G2.number_of_nodes() == 0:
         return False
 
-    graph_params, state_params, node_order, stack = _initialize_VF2pp(
-        G1, G2, G1_labels, G2_labels
-    )
-    matching_node = 1
+    # Check that both graphs have the same number of nodes and degree sequence
+    if not _fast_precheck(G1, G2):
+        return False
+
+    # Initialize parameters and cache necessary information about degree and labels
+    G1_labels = dict(G1.nodes(data=node_labels, default=default_label))
+    G2_labels = dict(G2.nodes(data=node_labels, default=default_label))
+    graph_params, state_params = _initialize_parameters(G1, G2, G1_labels, G2_labels)
+
+    # Check if G1 and G2 have the same labels, and that number of nodes per label is equal between the two graphs
+    if not _precheck_label_properties(graph_params):
+        return False
+
+    # Calculate the optimal node ordering
+    node_order = _matching_order(graph_params)
+
+    # Initialize the stack
+    stack = []
+    candidates = iter(_find_candidates(node_order[0], graph_params, state_params))
+    stack.append((node_order[0], candidates))
+
     mapping = state_params.mapping
+    reverse_mapping = state_params.reverse_mapping
+
+    # Index of the node from the order, currently being examined
+    matching_node = 1
 
     while stack:
         current_node, candidate_nodes = stack[-1]
@@ -88,32 +179,39 @@ def vf2pp_all_mappings(G1, G2, node_labels=None, default_label=None):
         try:
             candidate = next(candidate_nodes)
         except StopIteration:
+            # If no remaining candidates, return to a previous state, and follow another branch
             stack.pop()
             matching_node -= 1
             if stack:
-                _restore_state(stack, graph_params, state_params)
+                # Pop the previously added u-v pair, and look for a different candidate _v for u
+                popped_node1, _ = stack[-1]
+                popped_node2 = mapping[popped_node1]
+                mapping.pop(popped_node1)
+                reverse_mapping.pop(popped_node2)
+                _restore_Tinout(popped_node1, popped_node2, graph_params, state_params)
             continue
 
         if _feasibility(current_node, candidate, graph_params, state_params):
+            # Terminate if mapping is extended to its full
             if len(mapping) == G2.number_of_nodes() - 1:
-                mapping.update({current_node: candidate})
-                yield mapping
-                mapping.pop(current_node)
+                cp_mapping = mapping.copy()
+                cp_mapping[current_node] = candidate
+                yield cp_mapping
                 continue
 
-            _update_state(
-                current_node,
-                candidate,
-                matching_node,
-                node_order,
-                stack,
-                graph_params,
-                state_params,
+            # Feasibility rules pass, so extend the mapping and update the parameters
+            mapping[current_node] = candidate
+            reverse_mapping[candidate] = current_node
+            _update_Tinout(current_node, candidate, graph_params, state_params)
+            # Append the next node and its candidates to the stack
+            candidates = iter(
+                _find_candidates(node_order[matching_node], graph_params, state_params)
             )
+            stack.append((node_order[matching_node], candidates))
             matching_node += 1
 
 
-def _precheck(G1, G2, G1_labels, G2_labels, node_labels=None, default_label=-1):
+def _fast_precheck(G1, G2):
     """Checks if all the pre-requisites are satisfied before calling the isomorphism solver.
 
     Notes
@@ -143,23 +241,20 @@ def _precheck(G1, G2, G1_labels, G2_labels, node_labels=None, default_label=-1):
     if sorted(d for n, d in G1.degree()) != sorted(d for n, d in G2.degree()):
         return False
 
-    G1_labels.update(G1.nodes(data=node_labels, default=default_label))
-    G2_labels.update(G2.nodes(data=node_labels, default=default_label))
-
-    G1_nodes_per_label = {
-        label: len(nodes) for label, nodes in nx.utils.groups(G1_labels).items()
-    }
-
-    if any(
-        label not in G1_nodes_per_label or G1_nodes_per_label[label] != len(nodes)
-        for label, nodes in nx.utils.groups(G2_labels).items()
-    ):
-        return False
-
     return True
 
 
-def _initialize_VF2pp(G1, G2, G1_labels, G2_labels):
+def _precheck_label_properties(graph_params):
+    G1, G2, G1_labels, G2_labels, nodes_of_G1Labels, nodes_of_G2Labels, _ = graph_params
+    if any(
+        label not in nodes_of_G1Labels or len(nodes_of_G1Labels[label]) != len(nodes)
+        for label, nodes in nodes_of_G2Labels.items()
+    ):
+        return False
+    return True
+
+
+def _initialize_parameters(G1, G2, G1_labels, G2_labels):
     """Initializes all the necessary parameters for VF2++
 
     Parameters
@@ -194,24 +289,7 @@ def _initialize_VF2pp(G1, G2, G1_labels, G2_labels):
         T1_out, T2_out: set
             Ti_out contains all the nodes from Gi, that are neither in the mapping nor in Ti
     """
-    GraphParameters = collections.namedtuple(
-        "GraphParameters",
-        [
-            "G1",
-            "G2",
-            "G1_labels",
-            "G2_labels",
-            "nodes_of_G1Labels",
-            "nodes_of_G2Labels",
-            "G2_nodes_of_degree",
-        ],
-    )
-    StateParameters = collections.namedtuple(
-        "StateParameters",
-        ["mapping", "reverse_mapping", "T1", "T1_out", "T2", "T2_out"],
-    )
-
-    graph_params = GraphParameters(
+    graph_params = _GraphParameters(
         G1,
         G2,
         G1_labels,
@@ -221,14 +299,8 @@ def _initialize_VF2pp(G1, G2, G1_labels, G2_labels):
         nx.utils.groups({node: degree for node, degree in G2.degree()}),
     )
 
-    state_params = StateParameters(
+    state_params = _StateParameters(
         dict(), dict(), set(), set(G1.nodes()), set(), set(G2.nodes())
     )
 
-    node_order = _matching_order(graph_params)
-
-    starting_node = node_order[0]
-    candidates = _find_candidates(starting_node, graph_params, state_params)
-    stack = [(starting_node, iter(candidates))]
-
-    return graph_params, state_params, node_order, stack
+    return graph_params, state_params
