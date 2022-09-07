@@ -60,8 +60,6 @@ from inc.Helpers.state import (
     _update_Tinout,
 )
 
-__all__ = ["vf2pp_mapping", "vf2pp_is_isomorphic", "vf2pp_all_mappings"]
-
 _GraphParameters = collections.namedtuple(
     "_GraphParameters",
     [
@@ -76,84 +74,103 @@ _GraphParameters = collections.namedtuple(
 )
 _StateParameters = collections.namedtuple(
     "_StateParameters",
-    ["mapping", "reverse_mapping", "T1", "T1_out", "T2", "T2_out"],
+    ["mapping", "reverse_mapping", "T1", "T1_tilde", "T2", "T2_tilde"],
 )
 
 
-def vf2pp_mapping(G1, G2, node_labels=None, default_label=None):
+def vf2pp_isomorphism(G1, G2, node_label=None, default_label=None):
     """Return an isomorphic mapping between `G1` and `G2` if it exists.
 
     Parameters
     ----------
-    G1,G2: NetworkX Graph or MultiGraph instances.
-        The two graphs to check for isomorphism or monomorphism.
+    G1, G2 : NetworkX Graph or MultiGraph instances.
+        The two graphs to check for isomorphism.
 
-    node_labels: Label name
-        The label name of all nodes
+    node_label : str, optional
+        The name of the node attribute to be used when comparing nodes.
+        The default is `None`, meaning node attributes are not considered
+        in the comparison. Any node that doesn't have the `node_labels`
+        attribute uses `default_label` instead.
 
-    default_label: Label name
-        Let the user pick a default label value
+    default_label : scalar
+        Default value to use when a node doesn't have an attribute
+        named `node_label`. Default is `None`.
 
     Returns
     -------
-    Node mapping, if the two graphs are isomorphic. None otherwise.
+    dict or None
+        Node mapping if the two graphs are isomorphic. None otherwise.
     """
     try:
-        mapping = next(vf2pp_all_mappings(G1, G2, node_labels, default_label))
+        mapping = next(vf2pp_all_isomorphisms(G1, G2, node_label, default_label))
         return mapping
     except StopIteration:
         return None
 
 
-def vf2pp_is_isomorphic(G1, G2, node_labels=None, default_label=None):
+def vf2pp_is_isomorphic(G1, G2, node_label=None, default_label=None):
     """Examines whether G1 and G2 are isomorphic.
 
     Parameters
     ----------
-    G1,G2: NetworkX Graph or MultiGraph instances.
-        The two graphs to check for isomorphism or monomorphism.
+    G1, G2 : NetworkX Graph or MultiGraph instances.
+        The two graphs to check for isomorphism.
 
-    node_labels: Label name
-        The label name of all nodes
+    node_label : str, optional
+        The name of the node attribute to be used when comparing nodes.
+        The default is `None`, meaning node attributes are not considered
+        in the comparison. Any node that doesn't have the `node_labels`
+        attribute uses `default_label` instead.
 
-    default_label: Label name
-        Let the user pick a default label value
+    default_label : scalar
+        Default value to use when a node doesn't have an attribute
+        named `node_label`. Default is `None`.
 
     Returns
     -------
-    True if the two graphs are isomorphic. False otherwise.
+    bool
+        True if the two graphs are isomorphic, False otherwise.
     """
-    if vf2pp_mapping(G1, G2, node_labels, default_label) is not None:
+    if vf2pp_isomorphism(G1, G2, node_label, default_label) is not None:
         return True
     return False
 
 
-def vf2pp_all_mappings(G1, G2, node_labels=None, default_label=None):
+def vf2pp_all_isomorphisms(G1, G2, node_label=None, default_label=None):
     """Yields all the possible mappings between G1 and G2.
 
     Parameters
     ----------
-    G1,G2: NetworkX Graph or MultiGraph instances.
+    G1, G2 : NetworkX Graph or MultiGraph instances.
         The two graphs to check for isomorphism.
 
-    node_labels: string or None
-        The node attribute name within G that indicates node labels.
-        If None, then no node labels are used to compute isomorphisms.
+    node_label : str, optional
+        The name of the node attribute to be used when comparing nodes.
+        The default is `None`, meaning node attributes are not considered
+        in the comparison. Any node that doesn't have the `node_labels`
+        attribute uses `default_label` instead.
 
-    default_label: string
-        The default label for nodes that have no label attribute value.
+    default_label : scalar
+        Default value to use when a node doesn't have an attribute
+        named `node_label`. Default is `None`.
+
+    Yields
+    ------
+    dict
+        Isomorphic mapping between the nodes in `G1` and `G2`.
+
     """
     if G1.number_of_nodes() == 0 or G2.number_of_nodes() == 0:
         return False
 
     # Check that both graphs have the same number of nodes and degree sequence
-    if not _fast_precheck(G1, G2):
+    if not nx.faster_could_be_isomorphic(G1, G2):
         return False
 
     # Initialize parameters and cache necessary information about degree and labels
-    G1_labels = dict(G1.nodes(data=node_labels, default=default_label))
-    G2_labels = dict(G2.nodes(data=node_labels, default=default_label))
-    graph_params, state_params = _initialize_parameters(G1, G2, G1_labels, G2_labels)
+    graph_params, state_params = _initialize_parameters(
+        G1, G2, node_label, default_label
+    )
 
     # Check if G1 and G2 have the same labels, and that number of nodes per label is equal between the two graphs
     if not _precheck_label_properties(graph_params):
@@ -211,39 +228,6 @@ def vf2pp_all_mappings(G1, G2, node_labels=None, default_label=None):
             matching_node += 1
 
 
-def _fast_precheck(G1, G2):
-    """Checks if all the pre-requisites are satisfied before calling the isomorphism solver.
-
-    Notes
-    -----
-    Before trying to create the mapping between the nodes of the two graphs, we must check if:
-    1. The two graphs have equal number of nodes
-    2. The degree sequences in the two graphs are identical
-    3. The two graphs have the same label distribution. For example, if G1 has orange nodes but G2 doesn't, there's no
-    point in proceeding to create a mapping.
-
-    Parameters
-    ----------
-    G1,G2: NetworkX Graph or MultiGraph instances.
-        The two graphs to check for isomorphism or monomorphism.
-
-    G1_labels,G2_labels: dict
-        The label of every node in G1 and G2 respectively.
-
-        node_labels: Label name
-        The label name of all nodes
-
-    default_label: Label name
-        Let the user pick a default label value
-    """
-    if G1.order() != G2.order():
-        return False
-    if sorted(d for n, d in G1.degree()) != sorted(d for n, d in G2.degree()):
-        return False
-
-    return True
-
-
 def _precheck_label_properties(graph_params):
     G1, G2, G1_labels, G2_labels, nodes_of_G1Labels, nodes_of_G2Labels, _ = graph_params
     if any(
@@ -254,7 +238,7 @@ def _precheck_label_properties(graph_params):
     return True
 
 
-def _initialize_parameters(G1, G2, G1_labels, G2_labels):
+def _initialize_parameters(G1, G2, node_label=None, default_label=-1):
     """Initializes all the necessary parameters for VF2++
 
     Parameters
@@ -262,8 +246,15 @@ def _initialize_parameters(G1, G2, G1_labels, G2_labels):
     G1,G2: NetworkX Graph or MultiGraph instances.
         The two graphs to check for isomorphism or monomorphism
 
-    G1_labels,G2_labels: dict
-        The label of every node in G1 and G2 respectively
+    node_label : str, optional
+        The name of the node attribute to be used when comparing nodes.
+        The default is `None`, meaning node attributes are not considered
+        in the comparison. Any node that doesn't have the `node_labels`
+        attribute uses `default_label` instead.
+
+    default_label : scalar
+        Default value to use when a node doesn't have an attribute
+        named `node_label`. Default is `None`.
 
     Returns
     -------
@@ -289,6 +280,9 @@ def _initialize_parameters(G1, G2, G1_labels, G2_labels):
         T1_out, T2_out: set
             Ti_out contains all the nodes from Gi, that are neither in the mapping nor in Ti
     """
+    G1_labels = dict(G1.nodes(data=node_label, default=default_label))
+    G2_labels = dict(G2.nodes(data=node_label, default=default_label))
+
     graph_params = _GraphParameters(
         G1,
         G2,
